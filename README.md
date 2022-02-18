@@ -1,29 +1,13 @@
 # Set List
 
-Create lists of Bard songs and play them together. This is a work in progress.
+Create lists of Bard songs and play them all in a row. This is a work in progress.
 
 ## Usage
 
-Use `sl help` to print the options.
+Download `setlist.lua` and save it to `./addons/setlist/setlist.lua`. Load it with `lua load setlist`.
 
-Create a list:
+An empty songs file will be created at `./addons/setlist/songs.lua`. Fill this file with your song lists. See [sample.lua](./sample.lua) for example usage.
 
-```
-sl new dummies
-sl add "Enchanting Etude"
-sl add "Swift Etude"
-sl add "Bewitching Etude"
-```
+Call `setlist` or `sl` followed by the name of the desired list to play it. ie: `sl attack`.
 
-Play a list:
-
-```
-sl use dummies
-sl play
-```
-
-Play multiple lists:
-
-```
-sl dummies dyna
-```
+For use with in-game macros, use `/console sl attack` as the macro line.
