@@ -8,7 +8,9 @@ files = require('files')
 
 require('logger')
 
+local file = files.new('songs.lua')
 local config = {}
+
 local interrupts = 0
 local max_interrupt = 3
 
@@ -17,8 +19,6 @@ local running = false
 local run_next = 0
 
 windower.register_event('load', function()
-  local file = files.new('songs.lua')
-  
   if file:exists() then
     config = require('songs')
   else
@@ -42,6 +42,7 @@ windower.register_event('addon command', function(...)
     add_to_chat('//sl set_name -- play the specified set')
     add_to_chat('//sl start set_name -- play the specified set continuously')
     add_to_chat('//sl stop -- stop continuous play')
+    add_to_chat('//sl useSP -- toggle use of SP abilities')
   elseif cmd[1] == 'start' then
     if cmd[2] == nil then
       add_to_chat('You must pass a set name to this command')
@@ -54,19 +55,43 @@ windower.register_event('addon command', function(...)
       add_to_chat('Set '.. cmd[2] ..' not found')
     end
   elseif cmd[1] == 'stop' then
-    running = false
-    set_name = nil
-    add_to_chat('Stopping')
+    stop()
+  elseif cmd[1] == 'useSP' then
+    if config.settings.useSP then
+      add_to_chat('Stop using SP')
+    else
+      add_to_chat('Start using SP')
+    end
+    config.settings.useSP = not config.settings.useSP
   else
     play_set(cmd[1])
   end
 end)
 
 windower.register_event('zone change', function(new_zone, old_zone)
+  if running then
+    stop()
+  end
+end)
+
+windower.register_event('job change', function()
+  if running then
+    stop()
+  end
+end)
+
+windower.register_event('status change', function(new_status_id , old_status_id)
+  if new_status_id == 2 then -- player is KO
+    stop()
+  end
+end)
+
+function stop()
   running = false
   set_name = nil
+  queue = {}
   add_to_chat('Stopping')
-end)
+end
 
 function add_to_chat(string)
   windower.add_to_chat(7, string)
