@@ -1,6 +1,7 @@
 return {
     settings = {
         useSP = false,
+        useRoller = false,
         songDuration = 5,
         nitroSongDuration = 10.5
     },

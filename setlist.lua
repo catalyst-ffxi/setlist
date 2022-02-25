@@ -69,6 +69,7 @@ windower.register_event('addon command', function(...)
 end)
 
 windower.register_event('zone change', function(new_zone, old_zone)
+  add_to_chat('You zoned')
   if running then
     stop()
   end
@@ -82,7 +83,11 @@ end)
 
 windower.register_event('status change', function(new_status_id , old_status_id)
   if new_status_id == 2 then -- player is KO
+    add_to_chat('you died')
     stop()
+  elseif new_status_id == 33 then -- player is resting
+    add_to_chat('you rested')
+    queue = {}
   end
 end)
 
@@ -131,41 +136,52 @@ function play_next_song()
 
     add_to_chat('Playing '..song)
     windower.chat.input('/ma "'..song..'" '..target)
+  elseif running and config.settings.useRoller and windower.ffxi.get_player().sub_job == 'COR' then
+    windower.send_command('roller start')
   end
 end
 
 -- React to a completed song
 --
 windower.register_event('action', function(action)
-  if action.actor_id ~= player.id or #queue == 0 then
-    return
-  end
+  if action.actor_id ~= player.id then return end
 
-  resource_id = resources.spells:with('name', queue[1]).id
+  if #queue > 0 then
+    local current_song_id =  resources.spells:with('name', queue[1]).id
 
-  -- Song played successfuly
-  if action.category == 4 and action.param == resource_id then
-    table.remove(queue, 1)
-    coroutine.schedule(play_next_song, 3)
 
-  -- Song was interrupted
-  elseif action.category == 8 and action.param == 28787
-    and action.targets[1].actions[1].param == resource_id then
-
-    interrupts = interrupts + 1
-
-    if interrupts >= max_interrupt then
-      add_to_chat('Interrupted too many times')
-      queue = {}
-    else
-      add_to_chat('Interupted and retrying')      
+    if action.category == 4 and action.param == current_song_id then
+      -- Queue up the next song
+      table.remove(queue, 1)
       coroutine.schedule(play_next_song, 3)
+
+    elseif action.category == 8 and action.param == 28787
+      and action.targets[1].actions[1].param == current_song_id then
+
+      -- Song was interrupted, retry
+      interrupts = interrupts + 1
+
+      if interrupts >= max_interrupt then
+        add_to_chat('Interrupted too many times')
+        queue = {}
+      else
+        add_to_chat('Interupted and retrying')      
+        coroutine.schedule(play_next_song, 3)
+      end
     end
+
+  elseif running and (os.clock() - run_next < 3) and action.category > 1 then
+    run_next = run_next + 3
   end
 end)
 
 function do_songs()
-  if running == false or run_next > os.clock() or in_exp_zone() == false then
+  if in_exp_zone() == false then
+    add_to_chat('Cancelled due to zone whitelist check')
+    stop()
+  end
+
+  if running == false or run_next > os.clock() then
     return
   end
 
@@ -173,45 +189,36 @@ function do_songs()
   local trob = get_ability_recast('Troubadour')
   local clarion = get_ability_recast('Clarion Call')
   local soul = get_ability_recast('Soul Voice')
+  local marcato = get_ability_recast('Marcato')
   local wait = 0
+
+  local commands = L{}
+
+  if config.settings.useRoller and windower.ffxi.get_player().sub_job == 'COR' then
+    commands:append('roller stop')
+  end
 
   if night == 0 and trob == 0 then
     if config.settings.useSP and clarion == 0 and soul == 0 then
-      -- Songs with SV/Clarion
-      add_to_chat('Singing ' .. set_name .. ' with NITRO SV/Clarion')
-      windower.send_command(
-          [[
-              input /ja "Clarion Call" <me>;
-              wait 1.3;
-              input /ja "Soul Voice" <me>;
-              wait 1.3;
-              input /ja "Nightingale" <me>;
-              wait 1.3;
-              input /ja "Troubadour" <me>;
-              wait 1.3;
-              sl ]] .. set_name
-      )
-    else
-      -- Regular nitro songs
-      add_to_chat('Singing ' .. set_name .. ' with NITRO')
-      windower.send_command(
-          [[
-              input /ja "Nightingale" <me>;
-              wait 1.3;
-              input /ja "Troubadour" <me>;
-              wait 1.3;
-              input /ja "Marcato" <me>;
-              wait 1.3;
-              sl ]] .. set_name
-      )
+      add_to_chat('Singing ' .. set_name .. ' with SV/Clarion')
+      commands:append('input /ja "Soul Voice" <me>')
+      commands:append('input /ja "Clarion Call" <me>')
+    elseif marcato == 0 then
+      add_to_chat('Singing ' .. set_name .. ' with Marcato')
+      commands:append('input /ja "Marcato" <me>')
     end
+    commands:append('input /ja "Nightingale" <me>')
+    commands:append('input /ja "Troubadour" <me>')
     wait = config.settings.nitroSongDuration * 60
   else
-    -- Songs without nitro
-    add_to_chat('Singing ' .. set_name .. ' without NITRO')
-    play_set(set_name)
+    add_to_chat('Singing ' .. set_name)
     wait = config.settings.songDuration * 60
   end
+
+  commands:append('sl ' .. set_name)
+
+  local command_string = commands:concat('; wait 1.3;')
+  windower.send_command(command_string)
 
   add_to_chat('Sing again in ' .. wait .. ' seconds')
   run_next = os.clock() + wait
