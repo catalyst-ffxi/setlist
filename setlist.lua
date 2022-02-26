@@ -5,6 +5,7 @@ _addon.commands={'setlist','sl'}
 
 resources = require('resources')
 files = require('files')
+texts = require('texts')
 
 require('logger')
 
@@ -18,6 +19,42 @@ local set_name = nil
 local running = false
 local run_next = 0
 
+local display = texts.new(
+  'Setlist\n---------------\nQueue: ${queue|none}\nRunning: ${running|false}\nNext Sing: ${nextSing|n/a}\nUsing SP: ${useSP|No}',
+  {
+    pos = { x = 1000, y = 100 },
+    bg = { alpha = 50 },
+    text = {
+      size = 10,
+      font = 'Consolas',
+      stroke = {
+          width = 1,
+          alpha = 200
+      }
+    },
+    padding = 4,
+    flags = { draggable = true, right = false, bottom = false, bold = true }
+  }
+)
+display:show()
+
+function update_display()
+  display.useSP = config.settings.useSP and 'Yes' or 'No'
+  display.running = running
+  
+  if running and run_next ~= nil then
+    display.nextSing = math.ceil(run_next - os.clock())
+  else
+    display.nextSing = nil
+  end
+
+  if #queue > 0 then
+    display.queue = queue:concat(' => ')
+  else
+    display.queue = nil
+  end
+end
+
 windower.register_event('load', function()
   if file:exists() then
     config = require('songs')
@@ -28,6 +65,10 @@ windower.register_event('load', function()
 
   player = windower.ffxi.get_player()
   queue = {}
+
+  update_display()
+  update_display:loop(1)
+  do_songs:loop(5)
 end)
 
 windower.register_event('login', function()
@@ -67,6 +108,8 @@ windower.register_event('addon command', function(...)
     play_set(cmd[1])
   end
 end)
+
+windower.register_event('prerender', update_display)
 
 windower.register_event('zone change', function(new_zone, old_zone)
   add_to_chat('You zoned')
@@ -112,13 +155,13 @@ end
 -- Play a set
 --
 function play_set(set_name)
-  queue = {}
+  queue = L{}
   interrupts = 0
 
   set = config.songs[set_name]
   if set then
     for key, val in ipairs(set) do
-      table.insert(queue, val)
+      queue:append(val)
     end
   else
     add_to_chat("Set "..set_name.." not found")
@@ -152,7 +195,7 @@ windower.register_event('action', function(action)
 
     if action.category == 4 and action.param == current_song_id then
       -- Queue up the next song
-      table.remove(queue, 1)
+      queue:remove(1)
       coroutine.schedule(play_next_song, 3)
 
     elseif action.category == 8 and action.param == 28787
@@ -176,12 +219,7 @@ windower.register_event('action', function(action)
 end)
 
 function do_songs()
-  if in_exp_zone() == false then
-    add_to_chat('Cancelled due to zone whitelist check')
-    stop()
-  end
-
-  if running == false or run_next > os.clock() then
+  if running == false or run_next > os.clock() or in_exp_zone() == false then
     return
   end
 
@@ -235,11 +273,10 @@ local zone_whitelist = S{
   'Promyvion - Dem',
   'Promyvion - Holla',
   'Promyvion - Mea',
-  "Outer Ra'Kaznar"
+  "Outer Ra'Kaznar",
+  'Cape Teriggan'
 }
 
 function in_exp_zone()
   return zone_whitelist:contains(resources.zones[windower.ffxi.get_info().zone].english)
 end
-
-do_songs:loop(5)
