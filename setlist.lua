@@ -21,8 +21,9 @@ local state = {
 
 local settings = config.load({
   sp = false,
-  song_duration = 5.25,
-  use_roller = false,
+  nitro = false,
+  roller = true,
+  song_duration = 5.1,
   max_interrupt = 3,
   display = {
     x = 1000,
@@ -32,12 +33,14 @@ local settings = config.load({
 })
 
 local display_template = [[
-  Setlist
-  -------
-  Queue: ${queue|none}
-  Running: ${running|false}
-  Next Sing: ${next_sing|n/a}
-  Using SP: ${sp|No}
+Setlist
+-------
+\cs(${color})Running:\cr ${running|false}
+  \cs(${color})NITRO:\cr ${nitro|No}
+     \cs(${color})SP:\cr ${sp|No}
+    \cs(${color})Set:\cr ${set_name|n/a}
+   \cs(${color})Next:\cr ${next_sing|n/a}
+  \cs(${color})Queue:\cr ${queue|none}
 ]]
 
 local display = texts.new(
@@ -68,9 +71,12 @@ if settings.display.visible then
 end
 
 function update_display()
-  display.sp = settings.use_sp and 'Yes' or 'No'
-  display.running = state.running
-  
+  display.color = '100,200,200'
+  display.nitro = settings.nitro and 'Yes' or 'No'
+  display.sp = settings.sp and 'Yes' or 'No'
+  display.running = state.running and 'Yes' or 'No'
+  display.set_name = state.set_name
+
   if state.running and state.run_next > 0 then
     display.next_sing = math.ceil(state.run_next - os.clock())
   else
@@ -78,7 +84,7 @@ function update_display()
   end
 
   if #queue > 0 then
-    display.queue = queue:concat(' => ')
+    display.queue = queue:concat('\n      => ')
   else
     display.queue = nil
   end
@@ -95,7 +101,7 @@ windower.register_event('load', function()
   end
 
   update_display:loop(1)
-  do_songs:loop(5)
+  do_songs:loop(3)
 end)
 
 windower.register_event('login', function()
@@ -104,17 +110,22 @@ end)
 
 windower.register_event('addon command', function(...)
   cmd = {...}
-  if cmd[1] == 'help' then
+  command = cmd[1]
+  if command == 'help' then
     local chat = windower.log
     log('Setlist commands:')
-    log('//sl set_name -- play the specified set')
-    log('//sl start set_name -- play the specified set continuously')
-    log('//sl stop -- stop continuous play')
-    log('//sl visible -- show or hide the display')
+    log('//sl [set_name] -- play the specified set')
+    log('//sl stop -- stop playing')
+    log('//sl start [set_name] -- play the specified set continuously')
+    log('//sl switch [set_name] -- switch playing to a different set')
+    log('//sl next [n] -- set the next play value to n seconds from now')
+    log('//sl duration [n] -- set your base song duration (*without* NITRO)')
     log('//sl sp -- toggle use of SP abilities')
+    log('//sl nitro -- toggle use of NITRO')
     log('//sl roller -- toggle integration with roller')
+    log('//sl visible -- show or hide the display')
     log('//sl save -- save current settings')
-  elseif cmd[1] == 'start' then
+  elseif command == 'start' then
     if cmd[2] == nil then
       error('You must pass a set name to this command')
     elseif songs[cmd[2]] == nil then
@@ -123,32 +134,67 @@ windower.register_event('addon command', function(...)
       state.set_name = cmd[2]
       state.running = true
       state.run_next = 0
+      if cmd[3] ~= nil then
+        local int = tonumber(cmd[3])
+        if int > 0 then
+          state.run_next = os.clock() + int
+        end
+      end
       log('Starting continuous sing with set: ' .. state.set_name)
     end
-  elseif cmd[1] == 'stop' then
+  elseif command == 'stop' then
     stop()
-  elseif cmd[1] == 'visible' then
+  elseif command == 'visible' then
     settings.display.visible = not settings.display.visible
     if settings.display.visible then
       display:show()
     else
       display:hide()
     end
-  elseif cmd[1] == 'sp' then
-    settings.use_sp = not settings.use_sp
-    local verb = settings.use_sp and 'Start' or 'Stop'
+  elseif command == 'sp' then
+    settings.sp = not settings.sp
+    local verb = settings.sp and 'Start' or 'Stop'
     log(verb .. ' using SP abilities')
-  elseif cmd[1] == 'roller' then
-    settings.use_roller = not settings.use_roller
-    local verb = settings.use_roller and 'Start' or 'Stop'
+  elseif command == 'nitro' then
+    settings.nitro = not settings.nitro
+    local verb = settings.nitro and 'Start' or 'Stop'
+    log(verb .. ' using NITRO')
+  elseif command == 'roller' then
+    settings.roller = not settings.roller
+    local verb = settings.roller and 'Start' or 'Stop'
     log(verb .. ' using roller')
-  elseif cmd[1] == 'save' then
+  elseif command == 'duration' then
+    local duration = tonumber(cmd[2])
+    if duration ~= nil and duration > 0 then
+      settings.song_duration = duration
+      log('Setting base song duration to ' .. duration .. ' seconds')
+    else
+      error('The "duration" command requires a positive integer')
+    end
+  elseif command == 'next' then
+    local next = tonumber(cmd[2])
+    if next ~= nil and next > 0 then
+      state.run_next = os.clock() + next
+      log('Set next run to ' .. next .. ' seconds from now')
+    else
+      error('The "next" command requires a positive integer')
+    end
+  elseif command == 'switch' then
+    if cmd[2] == nil then
+      error('You must pass a set name to this command')
+    elseif songs[cmd[2]] == nil then
+      error('Set '.. cmd[2] ..' not found')
+    elseif songs[cmd[2]] then
+      state.set_name = cmd[2]
+      log('Switching active song set to: ' .. state.set_name)
+    end
+  elseif command == 'save' then
     local pos_x, pos_y = display:pos()
     settings.display.x = pos_x
     settings.display.y = pos_y
-    settings:save('all')
+    settings:save()
   else
-    play_set(cmd[1])
+    play_set(command)
   end
 end)
 
@@ -209,7 +255,7 @@ function play_next_song()
 
     log('Playing '..song)
     windower.chat.input('/ma "' .. song .. '" ' .. target)
-  elseif state.running and settings.use_roller and windower.ffxi.get_player().sub_job == 'COR' then
+  elseif state.running and settings.roller and windower.ffxi.get_player().sub_job == 'COR' then
     windower.send_command('roller start')
   end
 end
@@ -266,12 +312,12 @@ function do_songs()
 
   local commands = L{}
 
-  if settings.use_roller and windower.ffxi.get_player().sub_job == 'COR' then
+  if settings.roller and windower.ffxi.get_player().sub_job == 'COR' then
     commands:append('roller stop')
   end
 
-  if night == 0 and trob == 0 then
-    if settings.use_sp and clarion == 0 and soul == 0 then
+  if settings.nitro and night == 0 and trob == 0 then
+    if settings.sp and clarion == 0 and soul == 0 then
       log('Singing ' .. state.set_name .. ' with SV/Clarion')
       commands:append('input /ja "Soul Voice" <me>')
       commands:append('input /ja "Clarion Call" <me>')
