@@ -1,28 +1,49 @@
 _addon.name='Setlist'
 _addon.author='catalyst-ffxi'
 _addon.version='0.9'
-_addon.commands={'setlist','sl'}
+_addon.commands={'setlist', 'sl'}
 
 resources = require('resources')
 files = require('files')
 texts = require('texts')
-
+config = require('config')
 require('logger')
 
-local file = files.new('songs.lua')
-local config = {}
+local songs = {}
+local queue = L{}
 
-local interrupts = 0
-local max_interrupt = 3
+local state = {
+  interrupts = 0,
+  set_name = nil,
+  running = false,
+  run_next = 0
+}
 
-local set_name = nil
-local running = false
-local run_next = 0
+local settings = config.load({
+  sp = false,
+  song_duration = 5.25,
+  use_roller = false,
+  max_interrupt = 3,
+  display = {
+    x = 1000,
+    y = 100,
+    visible = true
+  }
+})
+
+local display_template = [[
+  Setlist
+  -------
+  Queue: ${queue|none}
+  Running: ${running|false}
+  Next Sing: ${next_sing|n/a}
+  Using SP: ${sp|No}
+]]
 
 local display = texts.new(
-  'Setlist\n---------------\nQueue: ${queue|none}\nRunning: ${running|false}\nNext Sing: ${nextSing|n/a}\nUsing SP: ${useSP|No}',
+  display_template,
   {
-    pos = { x = 1000, y = 100 },
+    pos = { x = settings.display.x, y = settings.display.y },
     bg = { alpha = 50 },
     text = {
       size = 10,
@@ -33,19 +54,27 @@ local display = texts.new(
       }
     },
     padding = 4,
-    flags = { draggable = true, right = false, bottom = false, bold = true }
+    flags = {
+      draggable = true,
+      right = false,
+      bottom = false,
+      bold = true 
+    }
   }
 )
-display:show()
+
+if settings.display.visible then
+  display:show()
+end
 
 function update_display()
-  display.useSP = config.settings.useSP and 'Yes' or 'No'
-  display.running = running
+  display.sp = settings.use_sp and 'Yes' or 'No'
+  display.running = state.running
   
-  if running and run_next ~= nil then
-    display.nextSing = math.ceil(run_next - os.clock())
+  if state.running and state.run_next ~= nil then
+    display.next_sing = math.ceil(state.run_next - os.clock())
   else
-    display.nextSing = nil
+    display.next_sing = nil
   end
 
   if #queue > 0 then
@@ -56,17 +85,15 @@ function update_display()
 end
 
 windower.register_event('load', function()
+  local file = files.new('songs.lua')
+
   if file:exists() then
-    config = require('songs')
+    songs = require('songs')
   else
-    add_to_chat('Creating songs file...')
-    file:write('return { settings = { useSP = false, songDuration = 5, nitroSongDuration = 10.5 }, songs = {} }')
+    notice('Creating songs file...')
+    file:write('return {}')
   end
 
-  player = windower.ffxi.get_player()
-  queue = {}
-
-  update_display()
   update_display:loop(1)
   do_songs:loop(5)
 end)
@@ -78,71 +105,82 @@ end)
 windower.register_event('addon command', function(...)
   cmd = {...}
   if cmd[1] == 'help' then
-    local chat = windower.add_to_chat
-    add_to_chat('Setlist commands:')
-    add_to_chat('//sl set_name -- play the specified set')
-    add_to_chat('//sl start set_name -- play the specified set continuously')
-    add_to_chat('//sl stop -- stop continuous play')
-    add_to_chat('//sl useSP -- toggle use of SP abilities')
+    local chat = windower.log
+    log('Setlist commands:')
+    log('//sl set_name -- play the specified set')
+    log('//sl start set_name -- play the specified set continuously')
+    log('//sl stop -- stop continuous play')
+    log('//sl visible -- show or hide the display')
+    log('//sl sp -- toggle use of SP abilities')
+    log('//sl roller -- toggle integration with roller')
+    log('//sl save -- save current settings')
   elseif cmd[1] == 'start' then
     if cmd[2] == nil then
-      add_to_chat('You must pass a set name to this command')
-    elseif config.songs[cmd[2]] then
-      set_name = cmd[2]
-      running = true
-      run_next = 0
-      add_to_chat('Starting continuous sing with set: ' .. set_name)
+      error('You must pass a set name to this command')
+    elseif songs[cmd[2]] then
+      state.set_name = cmd[2]
+      state.running = true
+      state.run_next = 0
+      log('Starting continuous sing with set: ' .. state.set_name)
     else
-      add_to_chat('Set '.. cmd[2] ..' not found')
+      error('Set '.. cmd[2] ..' not found')
     end
   elseif cmd[1] == 'stop' then
     stop()
-  elseif cmd[1] == 'useSP' then
-    if config.settings.useSP then
-      add_to_chat('Stop using SP')
+  elseif cmd[1] == 'visible' then
+    setting.display.visible = not settings.display.visible
+    if setting.display.visible then
+      display:show()
     else
-      add_to_chat('Start using SP')
+      display:hide()
     end
-    config.settings.useSP = not config.settings.useSP
+  elseif cmd[1] == 'sp' then
+    settings.use_sp = not settings.use_sp
+    if settings.use_sp then
+      log('Start using SP')
+    else
+      log('Stop using SP')
+    end
+  elseif cmd[1] == 'roller' then
+    settings.use_roller = not settings.use_roller
+    if settings.use_roller then
+      log('Start using roller')
+    else
+      log('Stop using roller')
+    end
+  elseif cmd[1] == 'save' then
+    local pos_x, pos_y = display:pos()
+    settings.display.x = pos_x
+    settings.display.y = pos_y
+    settings:save('all')
   else
     play_set(cmd[1])
   end
 end)
 
-windower.register_event('prerender', update_display)
+-- windower.register_event('prerender', update_display)
 
 windower.register_event('zone change', function(new_zone, old_zone)
-  add_to_chat('You zoned')
-  if running then
-    stop()
-  end
+  stop()
 end)
 
 windower.register_event('job change', function()
-  if running then
-    stop()
-  end
+  stop()
 end)
 
 windower.register_event('status change', function(new_status_id , old_status_id)
-  if new_status_id == 2 then -- player is KO
-    add_to_chat('you died')
+  if new_status_id == 2 or new_status_id == 33 then -- player is KO or resting
     stop()
-  elseif new_status_id == 33 then -- player is resting
-    add_to_chat('you rested')
-    queue = {}
   end
 end)
 
 function stop()
-  running = false
-  set_name = nil
-  queue = {}
-  add_to_chat('Stopping')
-end
-
-function add_to_chat(string)
-  windower.add_to_chat(7, string)
+  if state.running or #queue > 0 then
+    log('Stopping')
+  end
+  state.running = false
+  state.set_name = nil
+  queue:clear()
 end
 
 -- Return the unique ID for a song by name
@@ -155,16 +193,16 @@ end
 -- Play a set
 --
 function play_set(set_name)
-  queue = L{}
-  interrupts = 0
+  queue:clear()
+  state.interrups = 0
 
-  set = config.songs[set_name]
+  set = songs[set_name]
   if set then
     for key, val in ipairs(set) do
       queue:append(val)
     end
   else
-    add_to_chat("Set "..set_name.." not found")
+    log("Set "..set_name.." not found")
   end
 
   play_next_song()
@@ -177,9 +215,9 @@ function play_next_song()
     local song = queue[1]
     local target = "<me>"
 
-    add_to_chat('Playing '..song)
+    log('Playing '..song)
     windower.chat.input('/ma "'..song..'" '..target)
-  elseif running and config.settings.useRoller and windower.ffxi.get_player().sub_job == 'COR' then
+  elseif state.running and settings.use_roller and windower.ffxi.get_player().sub_job == 'COR' then
     windower.send_command('roller start')
   end
 end
@@ -187,7 +225,7 @@ end
 -- React to a completed song
 --
 windower.register_event('action', function(action)
-  if action.actor_id ~= player.id then return end
+  if action.actor_id ~= windower.ffxi.get_player().id then return end
 
   if #queue > 0 then
     local current_song_id =  resources.spells:with('name', queue[1]).id
@@ -202,25 +240,29 @@ windower.register_event('action', function(action)
       and action.targets[1].actions[1].param == current_song_id then
 
       -- Song was interrupted, retry
-      interrupts = interrupts + 1
+      state.interrups = state.interrups + 1
 
-      if interrupts >= max_interrupt then
-        add_to_chat('Interrupted too many times')
-        queue = {}
+      if state.interrups >= settings.max_interrupt then
+        log('Interrupted too many times')
+        queue:clear()
       else
-        add_to_chat('Interupted and retrying')      
+        log('Interupted and retrying')      
         coroutine.schedule(play_next_song, 3)
       end
     end
 
-  elseif running and (os.clock() - run_next < 3) and action.category > 1 then
-    run_next = run_next + 3
+  elseif state.running and (os.clock() - state.run_next < 3) and action.category > 1 then
+    state.run_next = state.run_next + 3
   end
 end)
 
 function do_songs()
-  if running == false or run_next > os.clock() or in_exp_zone() == false then
+  if state.running == false or state.run_next > os.clock() or in_exp_zone() == false then
     return
+  end
+
+  if windower.ffxi.get_player().status ~= 0 then
+    return -- player is dead or busy
   end
 
   local night = get_ability_recast('Nightingale')
@@ -228,38 +270,37 @@ function do_songs()
   local clarion = get_ability_recast('Clarion Call')
   local soul = get_ability_recast('Soul Voice')
   local marcato = get_ability_recast('Marcato')
-  local wait = 0
+  local wait = settings.song_duration * 60
 
   local commands = L{}
 
-  if config.settings.useRoller and windower.ffxi.get_player().sub_job == 'COR' then
+  if settings.use_roller and windower.ffxi.get_player().sub_job == 'COR' then
     commands:append('roller stop')
   end
 
   if night == 0 and trob == 0 then
-    if config.settings.useSP and clarion == 0 and soul == 0 then
-      add_to_chat('Singing ' .. set_name .. ' with SV/Clarion')
+    if settings.use_sp and clarion == 0 and soul == 0 then
+      log('Singing ' .. state.set_name .. ' with SV/Clarion')
       commands:append('input /ja "Soul Voice" <me>')
       commands:append('input /ja "Clarion Call" <me>')
     elseif marcato == 0 then
-      add_to_chat('Singing ' .. set_name .. ' with Marcato')
+      log('Singing ' .. state.set_name .. ' with Marcato')
       commands:append('input /ja "Marcato" <me>')
     end
     commands:append('input /ja "Nightingale" <me>')
     commands:append('input /ja "Troubadour" <me>')
-    wait = config.settings.nitroSongDuration * 60
+    wait = wait * 2
   else
-    add_to_chat('Singing ' .. set_name)
-    wait = config.settings.songDuration * 60
+    log('Singing ' .. state.set_name)
   end
 
-  commands:append('sl ' .. set_name)
+  commands:append('sl ' .. state.set_name)
 
   local command_string = commands:concat('; wait 1.3;')
   windower.send_command(command_string)
 
-  add_to_chat('Sing again in ' .. wait .. ' seconds')
-  run_next = os.clock() + wait
+  log('Sing again in ' .. wait .. ' seconds')
+  state.run_next = os.clock() + wait
 end
 
 function get_ability_recast(name)
@@ -273,8 +314,7 @@ local zone_whitelist = S{
   'Promyvion - Dem',
   'Promyvion - Holla',
   'Promyvion - Mea',
-  "Outer Ra'Kaznar",
-  'Cape Teriggan'
+  "Outer Ra'Kaznar"
 }
 
 function in_exp_zone()
