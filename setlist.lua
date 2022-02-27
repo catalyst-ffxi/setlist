@@ -71,7 +71,7 @@ function update_display()
   display.sp = settings.use_sp and 'Yes' or 'No'
   display.running = state.running
   
-  if state.running and state.run_next ~= nil then
+  if state.running and state.run_next > 0 then
     display.next_sing = math.ceil(state.run_next - os.clock())
   else
     display.next_sing = nil
@@ -117,37 +117,31 @@ windower.register_event('addon command', function(...)
   elseif cmd[1] == 'start' then
     if cmd[2] == nil then
       error('You must pass a set name to this command')
+    elseif songs[cmd[2]] == nil then
+      error('Set '.. cmd[2] ..' not found')
     elseif songs[cmd[2]] then
       state.set_name = cmd[2]
       state.running = true
       state.run_next = 0
       log('Starting continuous sing with set: ' .. state.set_name)
-    else
-      error('Set '.. cmd[2] ..' not found')
     end
   elseif cmd[1] == 'stop' then
     stop()
   elseif cmd[1] == 'visible' then
-    setting.display.visible = not settings.display.visible
-    if setting.display.visible then
+    settings.display.visible = not settings.display.visible
+    if settings.display.visible then
       display:show()
     else
       display:hide()
     end
   elseif cmd[1] == 'sp' then
     settings.use_sp = not settings.use_sp
-    if settings.use_sp then
-      log('Start using SP')
-    else
-      log('Stop using SP')
-    end
+    local verb = settings.use_sp and 'Start' or 'Stop'
+    log(verb .. ' using SP abilities')
   elseif cmd[1] == 'roller' then
     settings.use_roller = not settings.use_roller
-    if settings.use_roller then
-      log('Start using roller')
-    else
-      log('Stop using roller')
-    end
+    local verb = settings.use_roller and 'Start' or 'Stop'
+    log(verb .. ' using roller')
   elseif cmd[1] == 'save' then
     local pos_x, pos_y = display:pos()
     settings.display.x = pos_x
@@ -158,8 +152,6 @@ windower.register_event('addon command', function(...)
   end
 end)
 
--- windower.register_event('prerender', update_display)
-
 windower.register_event('zone change', function(new_zone, old_zone)
   stop()
 end)
@@ -169,8 +161,10 @@ windower.register_event('job change', function()
 end)
 
 windower.register_event('status change', function(new_status_id , old_status_id)
-  if new_status_id == 2 or new_status_id == 33 then -- player is KO or resting
+  if new_status_id == 2 then -- player is KO
     stop()
+  elseif new_status_id == 33 then -- player rested
+    queue:clear()
   end
 end)
 
@@ -183,13 +177,6 @@ function stop()
   queue:clear()
 end
 
--- Return the unique ID for a song by name
---
-function resource_id_for_song(song)
-  local resource = resources.spells:with('name', song)
-  return resource.id
-end
-
 -- Play a set
 --
 function play_set(set_name)
@@ -199,10 +186,15 @@ function play_set(set_name)
   set = songs[set_name]
   if set then
     for key, val in ipairs(set) do
+      if resources.spells:with('name', val) == nil then
+        error('Song ' .. val .. ' does not exist. Check your spelling.')
+        queue:clear()
+        return
+      end
       queue:append(val)
     end
   else
-    log("Set "..set_name.." not found")
+    error("Set ".. set_name .." not found")
   end
 
   play_next_song()
@@ -216,7 +208,7 @@ function play_next_song()
     local target = "<me>"
 
     log('Playing '..song)
-    windower.chat.input('/ma "'..song..'" '..target)
+    windower.chat.input('/ma "' .. song .. '" ' .. target)
   elseif state.running and settings.use_roller and windower.ffxi.get_player().sub_job == 'COR' then
     windower.send_command('roller start')
   end
@@ -228,8 +220,8 @@ windower.register_event('action', function(action)
   if action.actor_id ~= windower.ffxi.get_player().id then return end
 
   if #queue > 0 then
-    local current_song_id =  resources.spells:with('name', queue[1]).id
 
+    local current_song_id =  resources.spells:with('name', queue[1]).id
 
     if action.category == 4 and action.param == current_song_id then
       -- Queue up the next song
