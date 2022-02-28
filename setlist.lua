@@ -133,6 +133,13 @@ function update_display()
   end
 end
 
+function save()
+  local pos_x, pos_y = display:pos()
+  settings.display.x = pos_x
+  settings.display.y = pos_y
+  settings:save()
+end
+
 windower.register_event('load', function()
   local file = files.new('songs.lua')
 
@@ -178,6 +185,7 @@ windower.register_event('addon command', function(...)
     stop()
   elseif command == 'visible' then
     settings.display.visible = not settings.display.visible
+    save()
     if settings.display.visible then
       display:show()
     else
@@ -187,19 +195,23 @@ windower.register_event('addon command', function(...)
     settings.sp = not settings.sp
     local verb = settings.sp and 'Start' or 'Stop'
     log(verb .. ' using SP abilities')
+    save()
   elseif command == 'nitro' then
     settings.nitro = not settings.nitro
     local verb = settings.nitro and 'Start' or 'Stop'
     log(verb .. ' using NITRO')
+    save()
   elseif command == 'roller' then
     settings.roller = not settings.roller
     local verb = settings.roller and 'Start' or 'Stop'
     log(verb .. ' using roller')
+    save()
   elseif command == 'duration' then
     local duration = tonumber(cmd[2])
     if duration ~= nil and duration > 0 then
       settings.song_duration = duration
       log('Setting base song duration to ' .. duration .. ' minutes')
+      save()
     else
       error('The "duration" command requires a positive integer')
     end
@@ -221,10 +233,7 @@ windower.register_event('addon command', function(...)
       log('Switching active song set to: ' .. state.set_name)
     end
   elseif command == 'save' then
-    local pos_x, pos_y = display:pos()
-    settings.display.x = pos_x
-    settings.display.y = pos_y
-    settings:save()
+    save()
   else
     play_set(command)
   end
