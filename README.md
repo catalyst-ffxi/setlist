@@ -15,9 +15,17 @@ You will need to `lua reload setlist` to pick up changes to `songs.lua`.
 ## Usage
 
 ```
-setlist attack -- play "attack" set
-setlist start attack -- play "attack" set continuously
-setlist stop -- cease continuous play
+//sl [set_name] -- play the specified set
+//sl stop -- stop playing
+//sl start [set_name] -- play the specified set continuously
+//sl switch [set_name] -- switch playing to a different set
+//sl next [n] -- set the next play value to n seconds from now
+//sl duration [n] -- set your base song duration in minutes (*without* NITRO)
+//sl sp -- toggle use of SP abilities
+//sl nitro -- toggle use of NITRO
+//sl roller -- toggle integration with roller
+//sl visible -- show or hide the display
+//sl save -- save current settings
 ```
 
 Continuous play is a new feature. YMMV. Make sure to set the `songDuration` and `nitroSongDuration` values according to your own duration gear, as this determines how often the loop will run.

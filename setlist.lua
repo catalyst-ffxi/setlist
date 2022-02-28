@@ -51,7 +51,7 @@ local settings = config.load({
   sp = false,
   nitro = false,
   roller = true,
-  song_duration = 5.1,
+  song_duration = 4,
   max_interrupt = 3,
   display = {
     x = 1000,
@@ -59,6 +59,21 @@ local settings = config.load({
     visible = true
   }
 })
+
+local help_text = [[
+Setlist commands:
+//sl [set_name] -- play the specified set
+//sl stop -- stop playing
+//sl start [set_name] -- play the specified set continuously
+//sl switch [set_name] -- switch playing to a different set
+//sl next [n] -- set the next play value to n seconds from now
+//sl duration [n] -- set your base song duration in minutes (*without* NITRO)
+//sl sp -- toggle use of SP abilities
+//sl nitro -- toggle use of NITRO
+//sl roller -- toggle integration with roller
+//sl visible -- show or hide the display
+//sl save -- save current settings
+]]
 
 local display_template = [[
 Setlist
@@ -141,18 +156,7 @@ windower.register_event('addon command', function(...)
   command = cmd[1]
   if command == 'help' then
     local chat = windower.log
-    log('Setlist commands:')
-    log('//sl [set_name] -- play the specified set')
-    log('//sl stop -- stop playing')
-    log('//sl start [set_name] -- play the specified set continuously')
-    log('//sl switch [set_name] -- switch playing to a different set')
-    log('//sl next [n] -- set the next play value to n seconds from now')
-    log('//sl duration [n] -- set your base song duration (*without* NITRO)')
-    log('//sl sp -- toggle use of SP abilities')
-    log('//sl nitro -- toggle use of NITRO')
-    log('//sl roller -- toggle integration with roller')
-    log('//sl visible -- show or hide the display')
-    log('//sl save -- save current settings')
+    log(help_text)
   elseif command == 'start' then
     if cmd[2] == nil then
       error('You must pass a set name to this command')
@@ -195,7 +199,7 @@ windower.register_event('addon command', function(...)
     local duration = tonumber(cmd[2])
     if duration ~= nil and duration > 0 then
       settings.song_duration = duration
-      log('Setting base song duration to ' .. duration .. ' seconds')
+      log('Setting base song duration to ' .. duration .. ' minutes')
     else
       error('The "duration" command requires a positive integer')
     end
@@ -327,8 +331,8 @@ function do_songs()
     return
   end
 
-  if windower.ffxi.get_player().status ~= 0 then
-    return -- player is dead or busy
+  if windower.ffxi.get_player().status == 2 then
+    return -- player is dead
   end
 
   local night = get_ability_recast('Nightingale')
