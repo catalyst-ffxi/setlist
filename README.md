@@ -28,6 +28,6 @@ You will need to `lua reload setlist` to pick up changes to `songs.lua`.
 //sl save -- save current settings
 ```
 
-Continuous play is a new feature. YMMV. Make sure to set the `songDuration` and `nitroSongDuration` values according to your own duration gear, as this determines how often the loop will run.
+Continuous play is a new feature. YMMV. Make sure to set the your song duration using `sl duration [n]` according to your own duration gear, as this determines how often the loop will run. I find that 5.1 minutes works well for full duration carn bard, others may want to stick to 4 minutes.
 
 You may need to edit the `zone_whitelist` variable depending on where you intend to use it.
