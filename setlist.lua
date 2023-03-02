@@ -329,8 +329,7 @@ windower.register_event('action', function(action)
         coroutine.schedule(play_next_song, 3)
       end
     end
-
-  elseif state.running and (os.clock() - state.run_next < 3) and action.category > 1 then
+  elseif state.running and (state.run_next - os.clock() < 3) and action.category > 1 then
     state.run_next = state.run_next + 3
   end
 end)
@@ -393,9 +392,12 @@ local zone_whitelist = S{
   'Promyvion - Dem',
   'Promyvion - Holla',
   'Promyvion - Mea',
-  "Outer Ra'Kaznar"
+  "Outer Ra'Kaznar",
+  'Bibiki Bay',
+  "King Ranperre's Tomb"
 }
 
 function in_exp_zone()
-  return zone_whitelist:contains(resources.zones[windower.ffxi.get_info().zone].english)
+  return true
+  -- return zone_whitelist:contains(resources.zones[windower.ffxi.get_info().zone].english)
 end
