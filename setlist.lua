@@ -398,6 +398,6 @@ local zone_whitelist = S{
 }
 
 function in_exp_zone()
-  return true
-  -- return zone_whitelist:contains(resources.zones[windower.ffxi.get_info().zone].english)
+  -- return true
+  return zone_whitelist:contains(resources.zones[windower.ffxi.get_info().zone].english)
 end
